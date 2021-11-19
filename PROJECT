@@ -1,0 +1,6 @@
+domain: kubediag.org
+layout:
+- go.kubebuilder.io/v3
+projectName: event-metrics
+repo: netease.com/kubediag/event-metrics
+version: "3"
