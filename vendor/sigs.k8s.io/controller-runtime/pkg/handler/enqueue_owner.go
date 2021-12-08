@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/internal/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -59,31 +60,31 @@ type EnqueueRequestForOwner struct {
 
 // Create implements EventHandler
 func (e *EnqueueRequestForOwner) Create(evt event.CreateEvent, q workqueue.RateLimitingInterface) {
-	for _, req := range e.getOwnerReconcileRequest(evt.Object) {
+	for _, req := range e.getOwnerReconcileRequest(evt.Meta) {
 		q.Add(req)
 	}
 }
 
 // Update implements EventHandler
 func (e *EnqueueRequestForOwner) Update(evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
-	for _, req := range e.getOwnerReconcileRequest(evt.ObjectOld) {
+	for _, req := range e.getOwnerReconcileRequest(evt.MetaOld) {
 		q.Add(req)
 	}
-	for _, req := range e.getOwnerReconcileRequest(evt.ObjectNew) {
+	for _, req := range e.getOwnerReconcileRequest(evt.MetaNew) {
 		q.Add(req)
 	}
 }
 
 // Delete implements EventHandler
 func (e *EnqueueRequestForOwner) Delete(evt event.DeleteEvent, q workqueue.RateLimitingInterface) {
-	for _, req := range e.getOwnerReconcileRequest(evt.Object) {
+	for _, req := range e.getOwnerReconcileRequest(evt.Meta) {
 		q.Add(req)
 	}
 }
 
 // Generic implements EventHandler
 func (e *EnqueueRequestForOwner) Generic(evt event.GenericEvent, q workqueue.RateLimitingInterface) {
-	for _, req := range e.getOwnerReconcileRequest(evt.Object) {
+	for _, req := range e.getOwnerReconcileRequest(evt.Meta) {
 		q.Add(req)
 	}
 }
@@ -91,21 +92,13 @@ func (e *EnqueueRequestForOwner) Generic(evt event.GenericEvent, q workqueue.Rat
 // parseOwnerTypeGroupKind parses the OwnerType into a Group and Kind and caches the result.  Returns false
 // if the OwnerType could not be parsed using the scheme.
 func (e *EnqueueRequestForOwner) parseOwnerTypeGroupKind(scheme *runtime.Scheme) error {
-	// Get the kinds of the type
-	kinds, _, err := scheme.ObjectKinds(e.OwnerType)
+	gvk, err := apiutil.GVKForObject(e.OwnerType, scheme)
 	if err != nil {
 		log.Error(err, "Could not get ObjectKinds for OwnerType", "owner type", fmt.Sprintf("%T", e.OwnerType))
 		return err
 	}
-	// Expect only 1 kind.  If there is more than one kind this is probably an edge case such as ListOptions.
-	if len(kinds) != 1 {
-		err := fmt.Errorf("Expected exactly 1 kind for OwnerType %T, but found %s kinds", e.OwnerType, kinds)
-		log.Error(nil, "Expected exactly 1 kind for OwnerType", "owner type", fmt.Sprintf("%T", e.OwnerType), "kinds", kinds)
-		return err
-
-	}
 	// Cache the Group and Kind for the OwnerType
-	e.groupKind = schema.GroupKind{Group: kinds[0].Group, Kind: kinds[0].Kind}
+	e.groupKind = gvk.GroupKind()
 	return nil
 }
 

@@ -51,11 +51,6 @@ func (in *Endpoint) DeepCopyInto(out *Endpoint) {
 			(*out)[key] = val
 		}
 	}
-	if in.NodeName != nil {
-		in, out := &in.NodeName, &out.NodeName
-		*out = new(string)
-		**out = **in
-	}
 	return
 }
 
@@ -74,16 +69,6 @@ func (in *EndpointConditions) DeepCopyInto(out *EndpointConditions) {
 	*out = *in
 	if in.Ready != nil {
 		in, out := &in.Ready, &out.Ready
-		*out = new(bool)
-		**out = **in
-	}
-	if in.Serving != nil {
-		in, out := &in.Serving, &out.Serving
-		*out = new(bool)
-		**out = **in
-	}
-	if in.Terminating != nil {
-		in, out := &in.Terminating, &out.Terminating
 		*out = new(bool)
 		**out = **in
 	}
@@ -118,11 +103,6 @@ func (in *EndpointPort) DeepCopyInto(out *EndpointPort) {
 		*out = new(int32)
 		**out = **in
 	}
-	if in.AppProtocol != nil {
-		in, out := &in.AppProtocol, &out.AppProtocol
-		*out = new(string)
-		**out = **in
-	}
 	return
 }
 
@@ -141,6 +121,11 @@ func (in *EndpointSlice) DeepCopyInto(out *EndpointSlice) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
 	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
+	if in.AddressType != nil {
+		in, out := &in.AddressType, &out.AddressType
+		*out = new(AddressType)
+		**out = **in
+	}
 	if in.Endpoints != nil {
 		in, out := &in.Endpoints, &out.Endpoints
 		*out = make([]Endpoint, len(*in))

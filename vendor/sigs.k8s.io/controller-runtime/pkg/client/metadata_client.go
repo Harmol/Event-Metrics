@@ -1,17 +1,17 @@
 /*
-Copyright 2020 The Kubernetes Authors.
+ Copyright 2020 The Kubernetes Authors.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+     http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
 */
 
 package client
@@ -23,6 +23,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/metadata"
 )
@@ -50,7 +51,7 @@ func (mc *metadataClient) getResourceInterface(gvk schema.GroupVersionKind, ns s
 }
 
 // Delete implements client.Client
-func (mc *metadataClient) Delete(ctx context.Context, obj Object, opts ...DeleteOption) error {
+func (mc *metadataClient) Delete(ctx context.Context, obj runtime.Object, opts ...DeleteOption) error {
 	metadata, ok := obj.(*metav1.PartialObjectMetadata)
 	if !ok {
 		return fmt.Errorf("metadata client did not understand object: %T", obj)
@@ -64,11 +65,11 @@ func (mc *metadataClient) Delete(ctx context.Context, obj Object, opts ...Delete
 	deleteOpts := DeleteOptions{}
 	deleteOpts.ApplyOptions(opts)
 
-	return resInt.Delete(ctx, metadata.Name, *deleteOpts.AsDeleteOptions())
+	return resInt.Delete(metadata.Name, deleteOpts.AsDeleteOptions())
 }
 
 // DeleteAllOf implements client.Client
-func (mc *metadataClient) DeleteAllOf(ctx context.Context, obj Object, opts ...DeleteAllOfOption) error {
+func (mc *metadataClient) DeleteAllOf(ctx context.Context, obj runtime.Object, opts ...DeleteAllOfOption) error {
 	metadata, ok := obj.(*metav1.PartialObjectMetadata)
 	if !ok {
 		return fmt.Errorf("metadata client did not understand object: %T", obj)
@@ -82,11 +83,11 @@ func (mc *metadataClient) DeleteAllOf(ctx context.Context, obj Object, opts ...D
 		return err
 	}
 
-	return resInt.DeleteCollection(ctx, *deleteAllOfOpts.AsDeleteOptions(), *deleteAllOfOpts.AsListOptions())
+	return resInt.DeleteCollection(deleteAllOfOpts.AsDeleteOptions(), *deleteAllOfOpts.AsListOptions())
 }
 
 // Patch implements client.Client
-func (mc *metadataClient) Patch(ctx context.Context, obj Object, patch Patch, opts ...PatchOption) error {
+func (mc *metadataClient) Patch(ctx context.Context, obj runtime.Object, patch Patch, opts ...PatchOption) error {
 	metadata, ok := obj.(*metav1.PartialObjectMetadata)
 	if !ok {
 		return fmt.Errorf("metadata client did not understand object: %T", obj)
@@ -104,7 +105,7 @@ func (mc *metadataClient) Patch(ctx context.Context, obj Object, patch Patch, op
 	}
 
 	patchOpts := &PatchOptions{}
-	res, err := resInt.Patch(ctx, metadata.Name, patch.Type(), data, *patchOpts.AsPatchOptions())
+	res, err := resInt.Patch(metadata.Name, patch.Type(), data, *patchOpts.AsPatchOptions())
 	if err != nil {
 		return err
 	}
@@ -114,7 +115,7 @@ func (mc *metadataClient) Patch(ctx context.Context, obj Object, patch Patch, op
 }
 
 // Get implements client.Client
-func (mc *metadataClient) Get(ctx context.Context, key ObjectKey, obj Object) error {
+func (mc *metadataClient) Get(ctx context.Context, key ObjectKey, obj runtime.Object) error {
 	metadata, ok := obj.(*metav1.PartialObjectMetadata)
 	if !ok {
 		return fmt.Errorf("metadata client did not understand object: %T", obj)
@@ -127,7 +128,7 @@ func (mc *metadataClient) Get(ctx context.Context, key ObjectKey, obj Object) er
 		return err
 	}
 
-	res, err := resInt.Get(ctx, key.Name, metav1.GetOptions{})
+	res, err := resInt.Get(key.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -137,7 +138,7 @@ func (mc *metadataClient) Get(ctx context.Context, key ObjectKey, obj Object) er
 }
 
 // List implements client.Client
-func (mc *metadataClient) List(ctx context.Context, obj ObjectList, opts ...ListOption) error {
+func (mc *metadataClient) List(ctx context.Context, obj runtime.Object, opts ...ListOption) error {
 	metadata, ok := obj.(*metav1.PartialObjectMetadataList)
 	if !ok {
 		return fmt.Errorf("metadata client did not understand object: %T", obj)
@@ -156,7 +157,7 @@ func (mc *metadataClient) List(ctx context.Context, obj ObjectList, opts ...List
 		return err
 	}
 
-	res, err := resInt.List(ctx, *listOpts.AsListOptions())
+	res, err := resInt.List(*listOpts.AsListOptions())
 	if err != nil {
 		return err
 	}
@@ -165,7 +166,7 @@ func (mc *metadataClient) List(ctx context.Context, obj ObjectList, opts ...List
 	return nil
 }
 
-func (mc *metadataClient) PatchStatus(ctx context.Context, obj Object, patch Patch, opts ...PatchOption) error {
+func (mc *metadataClient) PatchStatus(ctx context.Context, obj runtime.Object, patch Patch, opts ...PatchOption) error {
 	metadata, ok := obj.(*metav1.PartialObjectMetadata)
 	if !ok {
 		return fmt.Errorf("metadata client did not understand object: %T", obj)
@@ -183,7 +184,7 @@ func (mc *metadataClient) PatchStatus(ctx context.Context, obj Object, patch Pat
 	}
 
 	patchOpts := &PatchOptions{}
-	res, err := resInt.Patch(ctx, metadata.Name, patch.Type(), data, *patchOpts.AsPatchOptions(), "status")
+	res, err := resInt.Patch(metadata.Name, patch.Type(), data, *patchOpts.AsPatchOptions(), "status")
 	if err != nil {
 		return err
 	}
