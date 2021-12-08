@@ -122,33 +122,33 @@ type specificInformersMap struct {
 	namespace string
 }
 
-// Start calls Run on each of the informers and sets started to true.  Blocks on the context.
+// Start calls Run on each of the informers and sets started to true.  Blocks on the stop channel.
 // It doesn't return start because it can't return an error, and it's not a runnable directly.
-func (ip *specificInformersMap) Start(ctx context.Context) {
+func (ip *specificInformersMap) Start(stop <-chan struct{}) {
 	func() {
 		ip.mu.Lock()
 		defer ip.mu.Unlock()
 
 		// Set the stop channel so it can be passed to informers that are added later
-		ip.stop = ctx.Done()
+		ip.stop = stop
 
 		// Start each informer
 		for _, informer := range ip.informersByGVK {
-			go informer.Informer.Run(ctx.Done())
+			go informer.Informer.Run(stop)
 		}
 
 		// Set started to true so we immediately start any informers added later.
 		ip.started = true
 		close(ip.startWait)
 	}()
-	<-ctx.Done()
+	<-stop
 }
 
-func (ip *specificInformersMap) waitForStarted(ctx context.Context) bool {
+func (ip *specificInformersMap) waitForStarted(stop <-chan struct{}) bool {
 	select {
 	case <-ip.startWait:
 		return true
-	case <-ctx.Done():
+	case <-stop:
 		return false
 	}
 }
@@ -212,13 +212,9 @@ func (ip *specificInformersMap) addInformerToMap(gvk schema.GroupVersionKind, ob
 	ni := cache.NewSharedIndexInformer(lw, obj, resyncPeriod(ip.resync)(), cache.Indexers{
 		cache.NamespaceIndex: cache.MetaNamespaceIndexFunc,
 	})
-	rm, err := ip.mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
-	if err != nil {
-		return nil, false, err
-	}
 	i := &MapEntry{
 		Informer: ni,
-		Reader:   CacheReader{indexer: ni.GetIndexer(), groupVersionKind: gvk, scopeName: rm.Scope.Name()},
+		Reader:   CacheReader{indexer: ni.GetIndexer(), groupVersionKind: gvk},
 	}
 	ip.informersByGVK[gvk] = i
 
@@ -240,7 +236,7 @@ func createStructuredListWatch(gvk schema.GroupVersionKind, ip *specificInformer
 		return nil, err
 	}
 
-	client, err := apiutil.RESTClientForGVK(gvk, false, ip.config, ip.codecs)
+	client, err := apiutil.RESTClientForGVK(gvk, ip.config, ip.codecs)
 	if err != nil {
 		return nil, err
 	}
@@ -250,15 +246,12 @@ func createStructuredListWatch(gvk schema.GroupVersionKind, ip *specificInformer
 		return nil, err
 	}
 
-	// TODO: the functions that make use of this ListWatch should be adapted to
-	//  pass in their own contexts instead of relying on this fixed one here.
-	ctx := context.TODO()
 	// Create a new ListWatch for the obj
 	return &cache.ListWatch{
 		ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 			res := listObj.DeepCopyObject()
 			isNamespaceScoped := ip.namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot
-			err := client.Get().NamespaceIfScoped(ip.namespace, isNamespaceScoped).Resource(mapping.Resource.Resource).VersionedParams(&opts, ip.paramCodec).Do(ctx).Into(res)
+			err := client.Get().NamespaceIfScoped(ip.namespace, isNamespaceScoped).Resource(mapping.Resource.Resource).VersionedParams(&opts, ip.paramCodec).Do().Into(res)
 			return res, err
 		},
 		// Setup the watch function
@@ -266,7 +259,7 @@ func createStructuredListWatch(gvk schema.GroupVersionKind, ip *specificInformer
 			// Watch needs to be set to true separately
 			opts.Watch = true
 			isNamespaceScoped := ip.namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot
-			return client.Get().NamespaceIfScoped(ip.namespace, isNamespaceScoped).Resource(mapping.Resource.Resource).VersionedParams(&opts, ip.paramCodec).Watch(ctx)
+			return client.Get().NamespaceIfScoped(ip.namespace, isNamespaceScoped).Resource(mapping.Resource.Resource).VersionedParams(&opts, ip.paramCodec).Watch()
 		},
 	}, nil
 }
@@ -283,25 +276,22 @@ func createUnstructuredListWatch(gvk schema.GroupVersionKind, ip *specificInform
 		return nil, err
 	}
 
-	// TODO: the functions that make use of this ListWatch should be adapted to
-	//  pass in their own contexts instead of relying on this fixed one here.
-	ctx := context.TODO()
 	// Create a new ListWatch for the obj
 	return &cache.ListWatch{
 		ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 			if ip.namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot {
-				return dynamicClient.Resource(mapping.Resource).Namespace(ip.namespace).List(ctx, opts)
+				return dynamicClient.Resource(mapping.Resource).Namespace(ip.namespace).List(opts)
 			}
-			return dynamicClient.Resource(mapping.Resource).List(ctx, opts)
+			return dynamicClient.Resource(mapping.Resource).List(opts)
 		},
 		// Setup the watch function
 		WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
 			// Watch needs to be set to true separately
 			opts.Watch = true
 			if ip.namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot {
-				return dynamicClient.Resource(mapping.Resource).Namespace(ip.namespace).Watch(ctx, opts)
+				return dynamicClient.Resource(mapping.Resource).Namespace(ip.namespace).Watch(opts)
 			}
-			return dynamicClient.Resource(mapping.Resource).Watch(ctx, opts)
+			return dynamicClient.Resource(mapping.Resource).Watch(opts)
 		},
 	}, nil
 }
@@ -320,26 +310,22 @@ func createMetadataListWatch(gvk schema.GroupVersionKind, ip *specificInformersM
 		return nil, err
 	}
 
-	// TODO: the functions that make use of this ListWatch should be adapted to
-	//  pass in their own contexts instead of relying on this fixed one here.
-	ctx := context.TODO()
-
-	// create the relevant listwatch
+	// create the relevant listwaatch
 	return &cache.ListWatch{
 		ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 			if ip.namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot {
-				return client.Resource(mapping.Resource).Namespace(ip.namespace).List(ctx, opts)
+				return client.Resource(mapping.Resource).Namespace(ip.namespace).List(opts)
 			}
-			return client.Resource(mapping.Resource).List(ctx, opts)
+			return client.Resource(mapping.Resource).List(opts)
 		},
 		// Setup the watch function
 		WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
 			// Watch needs to be set to true separately
 			opts.Watch = true
 			if ip.namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot {
-				return client.Resource(mapping.Resource).Namespace(ip.namespace).Watch(ctx, opts)
+				return client.Resource(mapping.Resource).Namespace(ip.namespace).Watch(opts)
 			}
-			return client.Resource(mapping.Resource).Watch(ctx, opts)
+			return client.Resource(mapping.Resource).Watch(opts)
 		},
 	}, nil
 }
