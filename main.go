@@ -17,20 +17,23 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
-
-	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
-	// to ensure that exec-entrypoint and run can make use of them.
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
+	// to ensure that exec-entrypoint and run can make use of them.
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	//+kubebuilder:scaffold:imports
+
+	"netease.com/kubediag/event-metrics/pkg/manager"
 )
 
 var (
@@ -48,16 +51,17 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
+	var duration time.Duration
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.DurationVar(&duration, "metrics-generate-duration", 30 * time.Second, "The time duration the EventManager wait to generate metrics.")
 	opts := zap.Options{
 		Development: true,
 	}
 	opts.BindFlags(flag.CommandLine)
-	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
@@ -74,6 +78,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	eventManager := manager.NewEventManager(
+		mgr.GetCache(),
+		ctrl.Log.WithName("EventManager"),
+		duration,
+		metricsAddr,
+	)
+
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
@@ -85,7 +96,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager")
+	go func() {
+		setupLog.Info("starting eventManager. eventManager waits for cache sync.")
+		eventManager.Cache.WaitForCacheSync(context.Background().Done())
+		setupLog.Info("cache synced. start eventManager.")
+		eventManager.Start()
+	}()
+
+	setupLog.Info("starting manager.")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
