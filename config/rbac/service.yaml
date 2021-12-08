@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: exporter
+    app.kubernetes.io/name: event-metrics
+    app.kubernetes.io/version: 1.0.0
+  name: event-metrics
+  namespace: kubediag
+spec:
+  ports:
+  - name: http-metrics
+    port: 8080
+    targetPort: http-metrics
+  selector:
+    app.kubernetes.io/name: event-metrics

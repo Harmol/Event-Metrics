@@ -4,17 +4,20 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   labels:
-    control-plane: controller-manager
-  name: controller-manager-metrics-monitor
-  namespace: system
+    app.kubernetes.io/component: exporter
+    app.kubernetes.io/name: event-metrics
+    app.kubernetes.io/version: 1.0.0
+    release: kube-prometheus-stack
+  name: event-metrics
+  namespace: kubediag
 spec:
   endpoints:
     - path: /metrics
-      port: https
-      scheme: https
+      port: http-metrics
+      scheme: http
       bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
       tlsConfig:
         insecureSkipVerify: true
   selector:
     matchLabels:
-      control-plane: controller-manager
+      app.kubernetes.io/name: event-metrics
