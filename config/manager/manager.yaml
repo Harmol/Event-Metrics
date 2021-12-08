@@ -1,36 +1,33 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  labels:
-    control-plane: controller-manager
-  name: system
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: controller-manager
-  namespace: system
   labels:
-    control-plane: controller-manager
+    app.kubernetes.io/component: exporter
+    app.kubernetes.io/name: event-metrics
+    app.kubernetes.io/version: 1.0.0
+  name: event-metrics
+  namespace: kubediag
 spec:
   selector:
     matchLabels:
-      control-plane: controller-manager
+      app.kubernetes.io/name: event-metrics
   replicas: 1
   template:
     metadata:
       labels:
-        control-plane: controller-manager
+        app.kubernetes.io/component: exporter
+        app.kubernetes.io/name: event-metrics
+        app.kubernetes.io/version: 1.0.0
     spec:
       securityContext:
         runAsNonRoot: true
       containers:
-      - command:
-        - /manager
-        args:
-        - --leader-elect
-        image: controller:latest
-        name: manager
+      - image: hub.c.163.com/kubediag/event-metrics:0.1.0
+        imagePullPolicy: IfNotPresent
+        ports:
+          - containerPort: 8080
+            name: http-metrics
+        name: event-metrics
         securityContext:
           allowPrivilegeEscalation: false
         livenessProbe:
@@ -48,9 +45,9 @@ spec:
         resources:
           limits:
             cpu: 100m
-            memory: 30Mi
+            memory: 800Mi
           requests:
             cpu: 100m
-            memory: 20Mi
-      serviceAccountName: controller-manager
+            memory: 500Mi
+      serviceAccountName: event-metrics
       terminationGracePeriodSeconds: 10
